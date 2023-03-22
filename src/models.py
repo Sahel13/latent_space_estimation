@@ -1,7 +1,6 @@
-from typing import Sequence
-
 import numpy as np
 import flax.linen as nn
+from typing import Sequence
 
 
 class MLP(nn.Module):
@@ -40,6 +39,4 @@ class AutoEncoder(nn.Module):
         return self.encoder(x)
 
     def decode(self, z):
-        z = self.decoder(z)
-        x = nn.sigmoid(z)
-        return x
+        return self.decoder(z)
