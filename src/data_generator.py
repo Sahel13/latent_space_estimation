@@ -12,29 +12,14 @@ class SimplePendulum:
     g: float = 9.8
     l: float = 2.
 
-    @jax.jit
-    def hamiltonian_fn(self, coords):
-        """
-        The Hamiltonian function for an ideal pendulum in generalized coordinates.
-        Returns the energy as a float.
-        coords => jnp.array([theta, p_theta])
-        """
-        q, p = jnp.split(coords, 2)
-        kin_energy = p**2 / (2 * self.m * self.l**2)
-        pot_energy = self.m * self.g * self.l * (1 - jnp.cos(q))
-        H = kin_energy + pot_energy
-        return H.reshape()
-
-    @jax.jit
     def dynamics_fn(self, t, coords):
         """
-        Function that returns the time derivatives of the position and momentum.
-        Uses polar coordinates.
+        :param coords: (theta, dtheta)
+        :returns: The derivatives of the inputs (dtheta, ddtheta).
         """
-        dcoords = jax.grad(self.hamiltonian_fn)(coords)
-        dHdq, dHdp = jnp.split(dcoords, 2)
-        derivatives = jnp.concatenate([dHdp, -dHdq], axis=-1)
-        return derivatives
+        theta, dtheta = coords
+        ddtheta = -(self.g / self.l) * jnp.sin(theta)
+        return jnp.array([dtheta, ddtheta])
 
     def get_initial_state(self, energy):
         """
@@ -47,19 +32,18 @@ class SimplePendulum:
         dtheta = 0
         return jnp.array([theta, dtheta])
 
-    @jax.jit
     def convert_to_cartesian(self, coords):
         """
         coords.shape = (2, time_steps)
-        coords[0] = (theta, p_theta, dtheta, dp_theta)
+        coords[0] = (theta, dtheta)
         """
         x = self.l * jnp.sin(coords[0])
         y = self.l * (1 - jnp.cos(coords[0]))
-        dxdt = jnp.multiply(jnp.cos(coords[0]), coords[1]) / self.l
-        dydt = jnp.multiply(jnp.sin(coords[0]), coords[1]) / self.l
+        dxdt = jnp.multiply(jnp.cos(coords[0]), coords[1]) * self.l
+        dydt = jnp.multiply(jnp.sin(coords[0]), coords[1]) * self.l
         return jnp.stack([x, y, dxdt, dydt])
 
-    def get_trajectory(self, key, t_span=[0, 10], timescale=1000, noise_std=0.01, **kwargs):
+    def get_trajectory(self, key, t_span=[0, 10], timescale=1000, noise_std=0.01, normalized=False):
         """
         Function to return a single trajectory.
         Returns a dictionary with both polar and cartesian coordinates.
@@ -76,8 +60,7 @@ class SimplePendulum:
             t_span=t_span,
             y0=initial_coords,
             t_eval=t_eval,
-            rtol=1e-10,
-            **kwargs)
+            rtol=1e-10)
 
         coords = pendulum_ivp['y']
 
@@ -89,15 +72,24 @@ class SimplePendulum:
         cartesian_coords = self.convert_to_cartesian(coords)
         trajectory[2:] = cartesian_coords
 
+        if normalized:
+            means = jnp.mean(trajectory, axis=1, keepdims=True)
+            norm_trajectory = trajectory / means
+            return norm_trajectory
+
         return trajectory
 
 
-def get_batched_data(key, train_data, batch_size):
+def get_batched_data(key, train_data, batch_size, permute=True):
     """
-    Should return a vector with (batch_dim, X.shape)
+    Should return a vector with (num_batches, batch_size, X.shape)
     where X is a single data point.
     """
-    x_data = random.permutation(key, train_data)
+    if permute:
+        x_data = random.permutation(key, train_data)
+    else:
+        x_data = train_data
+
     num_data_points = x_data.shape[0]
     num_batches = math.floor(num_data_points / batch_size)
     batched_data = np.empty((num_batches, batch_size, x_data.shape[1]))

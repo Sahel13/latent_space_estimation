@@ -1,8 +1,6 @@
 from typing import Sequence
 
 import numpy as np
-import jax
-import jax.numpy as jnp
 import flax.linen as nn
 
 
@@ -16,7 +14,7 @@ class MLP(nn.Module):
     @nn.compact
     def __call__(self, x):
         for feat in self.features[:-1]:
-            x = nn.relu(nn.Dense(feat)(x))
+            x = nn.tanh(nn.Dense(feat)(x))
         x = nn.Dense(self.features[-1])(x)
         return x
 
