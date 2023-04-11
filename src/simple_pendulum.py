@@ -12,20 +12,25 @@ from models import AutoEncoder
 from data_generator import SimplePendulum, get_batched_data
 
 # 0. Initialize the hyperparameters.
-num_epochs = 500
+num_epochs = 1000
 batch_size = 256
 encoder_widths = [64, 32, 16, 1]
 decoder_widths = [1, 16, 32, 64]
-learning_rate = 1e-3
+learning_rate = 1e-4
+key = random.PRNGKey(0)
 
-# 1. Get the data.
-key = random.PRNGKey(12345)
-pend = SimplePendulum()
+# 1. Get the training data.
 key, subkey = random.split(key)
-trajectory = pend.get_trajectory(subkey)
-train_data = trajectory.T
+pend = SimplePendulum(subkey)
+train_dataset = pend.get_dataset(20).T
+
 key, subkey = random.split(key)
-batched_data, num_batches = get_batched_data(subkey, train_data, batch_size)
+train_data = get_batched_data(subkey, train_dataset, batch_size)
+
+# Get validation data.
+val_dataset = pend.get_dataset(10).T
+key, subkey = random.split(key)
+val_data = get_batched_data(subkey, val_dataset, batch_size)
 
 # 2. Define and initialize the model.
 input_shape = (2,)  # (x, y) is the input to the encoder.
@@ -34,8 +39,6 @@ model = AutoEncoder(encoder_widths,
                     input_shape)
 
 init_data = jnp.ones((batch_size, *input_shape))
-key, subkey = random.split(key)
-variables = model.init(subkey, init_data)
 
 # Create the train state
 key, subkey = random.split(key)
@@ -92,17 +95,40 @@ def train_step(state, batch):
     return state, loss
 
 
+@jax.jit
+def compute_loss(state, data):
+    """
+    Compute the loss of a given dataset.
+    """
+    loss = 0.
+    num_batches = data.shape[0]
+    for i in range(num_batches):
+        batch = data[i]
+        loss += recon_loss(model, state.params, batch)
+    loss /= num_batches
+    return loss
+
+
 # 5. Train the model.
 for epoch in range(num_epochs):
+    # Print the validation loss before the model is trained.
+    if epoch == 0:
+        val_loss = compute_loss(state, val_data)
+        print(f"Untrained validation loss = {val_loss:.3E}")
+
+    # Loop over batches.
     epoch_loss = 0.
+    num_batches = train_data.shape[0]
     for i in range(num_batches):
-        batch = batched_data[i]
+        batch = train_data[i]
         state, loss = train_step(state, batch)
         epoch_loss += loss
     epoch_loss /= num_batches
 
-    if epoch % 10 == 0:
-        print(f"Epoch {epoch} - Loss = {epoch_loss}")
+    # Print the training and validation loss every 50 epochs.
+    if epoch % 50 == 0:
+        val_loss = compute_loss(state, val_data)
+        print(f"Epoch {epoch:04d} - Train loss = {epoch_loss:.3E} - Val loss = {val_loss:.3E}")
 
 
 def predict_latent_batched(model, params, batched_x):
@@ -137,7 +163,7 @@ def get_latent_variables(model, state, batched_input):
     """
     z_list = []
     dzdt_list = []
-    for i in range(num_batches):
+    for i in range(batched_input.shape[0]):
         batch = batched_input[i]
         z, dzdt = predict_latent_batched(model, state.params, batch)
         z_list.append(z)
@@ -149,7 +175,10 @@ def get_latent_variables(model, state, batched_input):
     return latent_variables
 
 
-test_data, num_batches = get_batched_data(key, train_data, batch_size, permute=False)
+# # Get test_data
+test_trajectory = pend.get_trajectory().T
+key, subkey = random.split(key)
+test_data = get_batched_data(subkey, test_trajectory, batch_size, permute=False)
 latent_variables = get_latent_variables(model, state, test_data)
 
 # Plot the results.
@@ -161,15 +190,15 @@ plt.title("Phase space diagram")
 plt.show()
 
 num_time_steps = latent_variables.shape[1]
-time_steps = jnp.linspace(0., 10., train_data.shape[0])
+time_steps = jnp.linspace(0., 10., num_time_steps)
 
 fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(18, 6))
-ax1.plot(time_steps[:num_time_steps], latent_variables[0])
+ax1.plot(time_steps, latent_variables[0])
 ax1.set_ylabel(r"$z$")
 ax1.set_xlabel("Time")
 ax1.set_title(r"How $z$ varies with time.")
 
-ax2.plot(time_steps[:num_time_steps], latent_variables[1])
+ax2.plot(time_steps, latent_variables[1])
 ax2.set_ylabel(r"$dz/dt$")
 ax2.set_xlabel("Time")
 ax2.set_title(r"How $dz/dt$ varies with time.")

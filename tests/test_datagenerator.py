@@ -1,20 +1,16 @@
 import sys
 
-sys.path.insert(0, '/u/69/iqbals3/unix/Work/Code/latent_space_estimation/src')
+sys.path.insert(0, '/home/sahel/Code/lse/src')
 
-from data_generator import SimplePendulum, get_dataset
+from data_generator import SimplePendulum, DoublePendulum
 import math
 import jax
 import jax.numpy as jnp
 
 
 class TestSimplePendulum():
-    pend = SimplePendulum()
-
-    def test_hamiltonian_fn(self):
-        coords = jnp.array([math.pi/3, 1.])
-        energy = self.pend.hamiltonian_fn(coords)
-        assert energy == 9.925
+    key = jax.random.PRNGKey(seed=0)
+    pend = SimplePendulum(key)
 
     def test_get_initial_state(self):
         total_energy = 9.8
@@ -29,6 +25,10 @@ class TestSimplePendulum():
         assert conv_coords.shape == (4, time_steps)
 
     def test_trajectory(self):
-        key = jax.random.PRNGKey(seed=0)
-        trajectory = self.pend.get_trajectory(key)
+        trajectory = self.pend.get_trajectory()
         assert trajectory.shape[0] == 6
+
+    def test_get_dataset(self):
+        key = jax.random.PRNGKey(seed=0)
+        dataset = self.pend.get_dataset(5)
+        assert dataset.shape[0] == 6

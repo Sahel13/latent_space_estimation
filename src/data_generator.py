@@ -3,13 +3,21 @@ import numpy as np
 import jax.numpy as jnp
 import jax.random as random
 from scipy.integrate import solve_ivp
-from chex import dataclass
 
-@dataclass
+
 class SimplePendulum:
-    m: float = 1.
-    g: float = 9.8
-    l: float = 2.
+
+    def __init__(self, key):
+        self.m = 1.
+        self.g = 9.8
+        self.l = 2.
+        self._key = key
+
+    def get_key(self):
+        """Convenience function to get a new random key."""
+        key, subkey = random.split(self._key)
+        self._key = key
+        return subkey
 
     def dynamics_fn(self, t, coords):
         """
@@ -42,7 +50,7 @@ class SimplePendulum:
         dydt = jnp.multiply(jnp.sin(coords[0]), coords[1]) * self.l
         return jnp.stack([x, y, dxdt, dydt])
 
-    def get_trajectory(self, key, t_span=[0, 10], timescale=1000, noise_std=0.01, normalized=False):
+    def get_trajectory(self, t_span=(0, 10), timescale=100, noise_std=0., normalized=False):
         """
         Function to return a single trajectory.
         Returns a dictionary with both polar and cartesian coordinates.
@@ -51,7 +59,7 @@ class SimplePendulum:
         trajectory = np.empty((6, len(t_eval)))
 
         # Get initial state.
-        total_energy = 9.8
+        total_energy = 9.8 + 2 * random.normal(self.get_key())
         initial_coords = self.get_initial_state(total_energy)
 
         pendulum_ivp = solve_ivp(
@@ -64,8 +72,7 @@ class SimplePendulum:
         coords = pendulum_ivp['y']
 
         # Add noise
-        key, subkey = random.split(key)
-        coords += random.normal(subkey, coords.shape) * noise_std
+        coords += random.normal(self.get_key(), coords.shape) * noise_std
 
         trajectory[:2] = coords
         cartesian_coords = self.convert_to_cartesian(coords)
@@ -77,6 +84,16 @@ class SimplePendulum:
             return norm_trajectory
 
         return trajectory
+
+    def get_dataset(self, num_trajectories, t_span=(0, 10), timescale=100, noise_std=0., normalized=False):
+        """
+        Function to return a dataset of trajectories.
+        """
+        dataset = []
+        for i in range(num_trajectories):
+            dataset.append(self.get_trajectory(t_span, timescale, noise_std, normalized))
+
+        return np.hstack(dataset)
 
 
 def get_batched_data(key, train_data, batch_size, permute=True):
@@ -97,4 +114,4 @@ def get_batched_data(key, train_data, batch_size, permute=True):
         high = (i + 1) * batch_size
         batched_data[i] = x_data[low:high]
 
-    return batched_data, num_batches
+    return batched_data
