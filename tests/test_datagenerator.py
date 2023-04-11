@@ -32,3 +32,13 @@ class TestSimplePendulum():
         key = jax.random.PRNGKey(seed=0)
         dataset = self.pend.get_dataset(5)
         assert dataset.shape[0] == 6
+
+
+class TestDoublePendulum():
+    pend = DoublePendulum()
+
+    def test_convert_to_cartesian(self):
+        time_steps = 20
+        coords = jnp.ones((4, time_steps))
+        conv_coords = self.pend.convert_to_cartesian(coords)
+        assert conv_coords.shape == (8, time_steps)

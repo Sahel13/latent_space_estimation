@@ -17,7 +17,7 @@ batch_size = 256
 encoder_widths = [64, 32, 16, 1]
 decoder_widths = [1, 16, 32, 64]
 learning_rate = 1e-4
-key = random.PRNGKey(0)
+key = random.PRNGKey(1234)
 
 # 1. Get the training data.
 key, subkey = random.split(key)
@@ -190,7 +190,7 @@ plt.title("Phase space diagram")
 plt.show()
 
 num_time_steps = latent_variables.shape[1]
-time_steps = jnp.linspace(0., 10., num_time_steps)
+time_steps = jnp.linspace(0., num_time_steps * 0.01, num_time_steps)
 
 fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(18, 6))
 ax1.plot(time_steps, latent_variables[0])
