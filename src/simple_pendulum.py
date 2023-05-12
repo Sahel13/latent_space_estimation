@@ -9,28 +9,26 @@ import optax
 from flax.training.train_state import TrainState
 
 from models import AutoEncoder
-from data_generator import SimplePendulum, get_batched_data
+from data_generator_numpy import SimplePendulum, get_batched_data
 
 # 0. Initialize the hyperparameters.
 num_epochs = 1000
 batch_size = 256
 encoder_widths = [64, 32, 16, 1]
-decoder_widths = [1, 16, 32, 64]
+decoder_widths = [i for i in reversed(encoder_widths[:-1])]
 learning_rate = 1e-4
-key = random.PRNGKey(1234)
+key = random.PRNGKey(100)
+rng = np.random.default_rng(12345)
 
 # 1. Get the training data.
-key, subkey = random.split(key)
-pend = SimplePendulum(subkey)
+pend = SimplePendulum(rng)
 train_dataset = pend.get_dataset(20).T
 
-key, subkey = random.split(key)
-train_data = get_batched_data(subkey, train_dataset, batch_size)
+train_data = get_batched_data(rng, train_dataset, batch_size)
 
 # Get validation data.
-val_dataset = pend.get_dataset(10).T
-key, subkey = random.split(key)
-val_data = get_batched_data(subkey, val_dataset, batch_size)
+val_dataset = pend.get_dataset(20).T
+val_data = get_batched_data(rng, val_dataset, batch_size)
 
 # 2. Define and initialize the model.
 input_shape = (2,)  # (x, y) is the input to the encoder.
@@ -177,29 +175,35 @@ def get_latent_variables(model, state, batched_input):
 
 # # Get test_data
 test_trajectory = pend.get_trajectory().T
-key, subkey = random.split(key)
-test_data = get_batched_data(subkey, test_trajectory, batch_size, permute=False)
+theta, dtheta = test_trajectory[:, 0], test_trajectory[:, 1]
+test_data = get_batched_data(rng, test_trajectory, batch_size, permute=False)
 latent_variables = get_latent_variables(model, state, test_data)
 
 # Plot the results.
 plt.figure()
-plt.plot(latent_variables[0], latent_variables[1])
+plt.plot(latent_variables[0], latent_variables[1], label="Estimated")
+plt.plot(theta, dtheta, label="True")
 plt.xlabel(r"$z$")
 plt.ylabel(r"$dz/dt$")
 plt.title("Phase space diagram")
+plt.legend()
 plt.show()
 
 num_time_steps = latent_variables.shape[1]
 time_steps = jnp.linspace(0., num_time_steps * 0.01, num_time_steps)
 
 fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(18, 6))
-ax1.plot(time_steps, latent_variables[0])
+ax1.plot(time_steps, latent_variables[0], label="Estimated")
+ax1.plot(time_steps, theta[:num_time_steps], label="True")
 ax1.set_ylabel(r"$z$")
 ax1.set_xlabel("Time")
 ax1.set_title(r"How $z$ varies with time.")
+ax1.legend()
 
-ax2.plot(time_steps, latent_variables[1])
+ax2.plot(time_steps, latent_variables[1], label="Estimated")
+ax2.plot(time_steps, dtheta[:num_time_steps], label="True")
 ax2.set_ylabel(r"$dz/dt$")
 ax2.set_xlabel("Time")
 ax2.set_title(r"How $dz/dt$ varies with time.")
+ax2.legend()
 plt.show()
