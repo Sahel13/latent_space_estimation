@@ -1,5 +1,7 @@
 __pycache__/
 .idea/
+src/lse.egg-info/
+venv/
 env/
 .vscode/
 .DS_Store/
